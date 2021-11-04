@@ -2,6 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
+
+#define DEBUG false
 
 /*
 Create a REPL to evaluate simple Mathematical S-Expressions.
@@ -23,99 +26,10 @@ for example:
 
 */
 
-typedef struct maybe_int {
-    bool has_value;
-    int value;
+#include "m_int.h"
 
-} m_int;
-
-m_int add_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value + y.value;
-        return res;
-    } else {
-         m_int none;
-        none.has_value = false;
-        return none;
-    }
-}
-
-m_int sub_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value - y.value;
-        return res;
-
-    } else {
-        m_int none;
-        none.has_value = false;
-        return none;
-    }
-
-}
-
-
-m_int mul_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value * y.value;
-        return res;
-
-    } else {
-        m_int none;
-        none.has_value = false;
-        return none;
-    }
-
-}
-
-
-m_int div_m_int(m_int x, m_int y) { 
-    m_int none;
-    none.has_value = false;
-    if (x.has_value == true && y.has_value == true) {
-        if (y.value == 0) {
-            return none;
-        }
-        m_int res;
-        res.has_value = true;
-        res.value = x.value / y.value;
-        return res;
-    } else {
-        return none;
-    }
-
-}
-
-int unwrap_m_int(m_int x) {
-    if (x.has_value == true) {
-        return x.value;
-    }
-    else {
-        printf("ERROR: Tried to extract nonexistent value from m_int\n");
-        exit(1);
-    }
-
-}
-
-m_int parse_int(char *x) {
-    if (atoi(x) == 0 && strcmp(x, "0") != 0) {
-        m_int fail;
-        fail.has_value = false;
-        return fail;
-    }
-
-    m_int res;
-    res.has_value = true;
-    res.value = atoi(x);
-    return res;
-}
-
-typedef enum op_types { PLUS, MINUS, MULTIPLY, DIVIDE } op_type;
+typedef enum { PLUS, MINUS, MULTIPLY, DIVIDE } op_type;
+typedef enum { EXPR, INT_LITERAL, OP } token_type;
 
 typedef struct s_exp {
     bool is_value;
@@ -124,6 +38,12 @@ typedef struct s_exp {
     struct s_exp *operand_1;
     struct s_exp *operand_2;
 } sexp;
+
+typedef struct {
+    token_type typ;
+    char     *text;
+    
+} token;
 
 
 char *pop_token(char str[], char delim) {
@@ -174,8 +94,6 @@ char *pop_nested_expr(char str[]) {
         // sub_parenthesised group has been accounted for and we have 
         // encapsulated the whole parenthesised group.
 
-        // TODO: Error handling here. This currently cannot cope with
-        // unmatched parentheses.
         if (str[i] == '(') { openp_c++; }
         if (str[i] == ')') { closp_c++; }
         if (openp_c == closp_c) {
@@ -190,46 +108,68 @@ char *pop_nested_expr(char str[]) {
         }
 
     }
+    printf("ERROR: Unbalanced parenthesis\n");
     return NULL;
 }
 
-void remove_parens(char str[]) {
+int remove_parens(char str[]) {
     if (str[0] !='(' || str[strlen(str) - 1] != ')') {
-        printf("ERROR: Unfound parenthesis");
-        exit(1);
+        printf("ERROR: Unfound parenthesis\n");
+        return 1;
     }
     
     memmove(str, str+1, strlen(str));
     str[strlen(str) - 1] = '\0';
-
+    return 0;
 
 }
 
 
 sexp* parse_sexp(char expr[]) {
-    //printf("parsing '%s' to sexp\n", expr);
-    
+    #if DEBUG
+    printf("parsing '%s' to sexp\n", expr);
+    #endif
     
     sexp* res;
     res = malloc(sizeof(sexp));
     
-    remove_parens(expr);
+    int err = remove_parens(expr);
+    if (err != 0) {
+        return NULL;
+
+    }
     
     // tokenize
-    //printf("Tokenizing '%s'\n", expr);
-    char *toks[3]; 
-    char *tok = "";
-    for (int tokc = 0; tok != NULL && strcmp(expr, "") != 0; tokc++) {
+    // TODO: probably we should introduce a structure for a token which 
+    // stores the type of token: right now we have integer literals and 
+    // expressions as our token types.
+    #if DEBUG
+    printf("Tokenizing '%s'\n", expr);
+    #endif
+    token toks[3]; 
+    token tok;
+    for (int tokc = 0; tok.text != NULL && strcmp(expr, "") != 0; tokc++) {
         // get next token
         if (expr[0] == '(') {
-            tok = pop_nested_expr(expr);
+            tok.typ = EXPR;
+            tok.text = pop_nested_expr(expr);
+            if (tok.text == NULL) { return NULL; }
         } else {
-            tok = pop_token(expr, ' ');
-        }        
-        //printf("tok = '%s'\n", tok);
+            tok.text = pop_token(expr, ' ');
+            // TODO: consider adding string literals, words, keywords, etc...
+            if (parse_int(tok.text).has_value == true) {
+                tok.typ = INT_LITERAL;
+            } else {
+                tok.typ = OP;
+            }
+
+        }
+        #if DEBUG        
+        printf("tok = '%s'\n", tok.text);
+        #endif
         //skip empty tokens (caused by consecutive spaces)
-        if (strcmp(tok, "") == 0) { tokc--; continue; }
-        
+        if (strcmp(tok.text, "") == 0) { tokc--; continue; }
+ 
         // only parse 3 tokens, skip the rest
         if (tokc > 2) {
             printf("TODO: Parsing of more than 3 tokens per expression is not implemented, skipping remaining tokens\n");
@@ -237,41 +177,77 @@ sexp* parse_sexp(char expr[]) {
         }
  
         // add token to toks 
-        toks[tokc] = malloc(strlen(tok));
-        strcpy(toks[tokc], tok);
-        //printf("toks[%d] = '%s'\n", tokc, toks[tokc]);
-
+        toks[tokc] = tok;
+        #if DEBUG
+        printf("toks[%d] = '%s'\n", tokc, toks[tokc].text);
+        #endif
     }
-    
-     
-    // initialize operands
-    sexp* operand_1 = malloc(sizeof(sexp));
-    sexp* operand_2 = malloc(sizeof(sexp));
-    
-    //printf("Parsing tokens...\n");
-    //printf("0: '%s'\n", toks[0]);
-    //printf("1: '%s'\n", toks[1]);
-    //printf("2: '%s'\n", toks[2]);
-     
-    // parse
-    // TODO: Refactor this bullshit! it is terrible.
-    
-    // determine operation
-    if (strcmp(toks[0], "+") == 0) { 
-        res->op = PLUS;
 
-    } else if (strcmp(toks[0], "-") == 0) {
+   
+
+    #if DEBUG
+    printf("Parsing tokens...\n");
+    printf("0: '%s'\n", toks[0].text);
+    printf("1: '%s'\n", toks[1].text);
+    printf("2: '%s'\n", toks[2].text);
+    #endif
+    // parse
+    // TODO:
+    // refactor this to supporting sexps with
+    // an arbitrary amount of operands.
+
+
+
+    // Parse op
+    #if DEBUG
+    printf("Parsing op from token: {typ: %d, text: '%s'}\n",
+            toks[0].typ,
+            toks[0].text);
+    #endif
+    if (toks[0].typ != OP) {
+        printf("ERROR: Expected sexp to begin with op\n");
+        return NULL;
+    }
+
+    if (strcmp(toks[0].text, "+") == 0) { 
+        res->op = PLUS;
+    } else if (strcmp(toks[0].text, "-") == 0) {
         res->op = MINUS;
-    } else if (strcmp(toks[0], "*") == 0) {
+    } else if (strcmp(toks[0].text, "*") == 0) {
         res-> op = MULTIPLY;
-    } else if (strcmp(toks[0], "/") == 0) {
+    } else if (strcmp(toks[0].text, "/") == 0) {
         res-> op = DIVIDE;
     } else {
-        printf("ERROR: '%s' is not a valid operation\n", toks[0]);
-        exit(1);
+        printf("ERROR: '%s' is not a valid operation\n", toks[0].text);
+        return NULL;
 
     }
+    #if DEBUG
+    printf("Sucessfully parsed op\n");
+    #endif
 
+    // Parse operands
+
+    // initialize operands
+    sexp* operands[2] = { malloc(sizeof(sexp)), malloc(sizeof(sexp)) };
+
+
+    for (int i = 1; i < 3; i++) {
+        if (toks[i].typ == INT_LITERAL) {
+            operands[i - 1]->is_value = true;
+            operands[i - 1]->value = parse_int(toks[i].text);
+        } else if (toks[i].typ == EXPR) {
+            operands[i - 1] = parse_sexp(toks[i].text);
+            if (operands[i - 1] == NULL) { return NULL; }
+        } else if (toks[i].typ == OP) {
+            printf("ERROR: Ops are not allowed as operands\n");
+            return NULL;
+        } else {
+            printf("Unreachable\n");
+            assert(false);
+        }
+    }
+    /*
     if (parse_int(toks[1]).has_value == true &&
         parse_int(toks[2]).has_value == true) {
         operand_1->is_value = 1;
@@ -280,43 +256,60 @@ sexp* parse_sexp(char expr[]) {
         operand_2->value = parse_int(toks[2]);        
     } else if (parse_int(toks[1]).has_value == false) {
         operand_1 = parse_sexp(toks[1]);
+        if (operand_1 == NULL) { return NULL; }
         operand_2->is_value = 1;
         operand_2->value = parse_int(toks[2]);
     } else if (parse_int(toks[2]).has_value == false) {
         operand_1->is_value = 1;
         operand_1->value = parse_int(toks[1]);
         operand_2 = parse_sexp(toks[2]);
+        if (operand_2 == NULL) { return NULL; }
     }
 
-    res->is_value = false;
-    res->operand_1 = operand_1;
-    res->operand_2 = operand_2;
+    */
 
-    
+    res->is_value = false;
+    res->operand_1 = operands[0];
+    res->operand_2 = operands[1];
+
     return res;
     
 }
 
-m_int eval_sexp(sexp *s) {
-    //printf("Evaluating sexp...\n");
-    //printf("  s->is_value: %d\n", s->is_value);
-    //printf("  s->op: %d\n", s->op);
-    //printf("  PLUS: %d\n", PLUS);
+m_int* eval_sexp(sexp *s) {
+    if (s == NULL) {
+        return NULL;
+    }    
+    
+    #if DEBUG
+    printf("Evaluating sexp...\n");
+    printf("  s->is_value: %d\n", s->is_value);
+    printf("  s->op: %d\n", s->op);
+    #endif
+    m_int *res;
+    res = malloc(sizeof(m_int));
 
     if (s->is_value == true) {
-        //printf("Evaled value_only sexp with val: %d\n", unwrap_m_int(s->value));
-        return s->value;
+        #if DEBUG == true
+        printf("Evaled value_only sexp with val: %d\n", unwrap_m_int(s->value));
+        #endif
+        *res = s->value;
+        return res;
     } else if (s->op == PLUS) {
-        return add_m_int(eval_sexp(s->operand_1), eval_sexp(s->operand_2));
+        *res = add_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        return res;
     } else if (s->op == MINUS) {
-        return sub_m_int(eval_sexp(s->operand_1), eval_sexp(s->operand_2));
+        *res = sub_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        return res;
     } else if (s->op == MULTIPLY) {
-        return mul_m_int(eval_sexp(s->operand_1), eval_sexp(s->operand_2));
+        *res = mul_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        return res;
     } else if (s->op == DIVIDE) {
-        return div_m_int(eval_sexp(s->operand_1), eval_sexp(s->operand_2));
+        *res = div_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        return res;
     } else {
-        printf("ERROR: Cannot eval sexp: %d is not implemented.\n", s->op);
-        exit(1);
+        printf("TODO: Cannot eval sexp because %dth op is not implemented.\n", s->op);
+        return NULL;
     }
 }
 
@@ -334,8 +327,12 @@ int main(void) {
         if (strcmp(input, EXIT_CMD) == 0) {
             exit(0);
         }
-        //printf("input: '%s'\n", input);
-        int res = unwrap_m_int(eval_sexp(parse_sexp(input)));
+        #if DEBUG == true
+        printf("input: '%s'\n", input);
+        #endif
+        m_int* m_res = eval_sexp(parse_sexp(input));
+        if (m_res == NULL) { continue; }
+        int res = unwrap_m_int(*m_res);
         printf("%d\n", res);
     }
 }
