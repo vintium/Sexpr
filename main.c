@@ -140,14 +140,15 @@ sexp* parse_sexp(char expr[]) {
     }
     
     // tokenize
-    // TODO: probably we should introduce a structure for a token which 
-    // stores the type of token: right now we have integer literals and 
-    // expressions as our token types.
     #if DEBUG
     printf("Tokenizing '%s'\n", expr);
     #endif
-    token toks[3]; 
+
+    // TODO: count how many tokens there will be
+    // in order to determine how big toks needs to be
+    token *toks[3] = {NULL, NULL, NULL}; 
     token tok;
+    tok.text = "placeholder";
     for (int tokc = 0; tok.text != NULL && strcmp(expr, "") != 0; tokc++) {
         // get next token
         if (expr[0] == '(') {
@@ -177,19 +178,22 @@ sexp* parse_sexp(char expr[]) {
         }
  
         // add token to toks 
-        toks[tokc] = tok;
+        token* tok_cpy = malloc(sizeof(token));
+        memcpy(tok_cpy, &tok, sizeof(token));
+        toks[tokc] = tok_cpy;
         #if DEBUG
-        printf("toks[%d] = '%s'\n", tokc, toks[tokc].text);
+        printf("toks[%d] = '%s'\n", tokc, toks[tokc]->text);
         #endif
     }
-
+    
+    //TODO: Check if any token remained NULL
    
 
     #if DEBUG
     printf("Parsing tokens...\n");
-    printf("0: '%s'\n", toks[0].text);
-    printf("1: '%s'\n", toks[1].text);
-    printf("2: '%s'\n", toks[2].text);
+    printf("0: '%s'\n", toks[0]->text);
+    printf("1: '%s'\n", toks[1]->text);
+    printf("2: '%s'\n", toks[2]->text);
     #endif
     // parse
     // TODO:
@@ -201,24 +205,26 @@ sexp* parse_sexp(char expr[]) {
     // Parse op
     #if DEBUG
     printf("Parsing op from token: {typ: %d, text: '%s'}\n",
-            toks[0].typ,
-            toks[0].text);
+            toks[0]->typ,
+            toks[0]->text);
     #endif
-    if (toks[0].typ != OP) {
-        printf("ERROR: Expected sexp to begin with op\n");
+    if (toks[0]->typ != OP) {
+        printf("ERROR: Expected sexp to begin with op,\n");
+        printf("got {typ: %d, text: '%s'} instead.\n", toks[0]->typ,
+                toks[0]->text);
         return NULL;
     }
 
-    if (strcmp(toks[0].text, "+") == 0) { 
+    if (strcmp(toks[0]->text, "+") == 0) { 
         res->op = PLUS;
-    } else if (strcmp(toks[0].text, "-") == 0) {
+    } else if (strcmp(toks[0]->text, "-") == 0) {
         res->op = MINUS;
-    } else if (strcmp(toks[0].text, "*") == 0) {
+    } else if (strcmp(toks[0]->text, "*") == 0) {
         res-> op = MULTIPLY;
-    } else if (strcmp(toks[0].text, "/") == 0) {
+    } else if (strcmp(toks[0]->text, "/") == 0) {
         res-> op = DIVIDE;
     } else {
-        printf("ERROR: '%s' is not a valid operation\n", toks[0].text);
+        printf("ERROR: '%s' is not a valid operation\n", toks[0]->text);
         return NULL;
 
     }
@@ -233,13 +239,13 @@ sexp* parse_sexp(char expr[]) {
 
 
     for (int i = 1; i < 3; i++) {
-        if (toks[i].typ == INT_LITERAL) {
+        if (toks[i]->typ == INT_LITERAL) {
             operands[i - 1]->is_value = true;
-            operands[i - 1]->value = parse_int(toks[i].text);
-        } else if (toks[i].typ == EXPR) {
-            operands[i - 1] = parse_sexp(toks[i].text);
+            operands[i - 1]->value = parse_int(toks[i]->text);
+        } else if (toks[i]->typ == EXPR) {
+            operands[i - 1] = parse_sexp(toks[i]->text);
             if (operands[i - 1] == NULL) { return NULL; }
-        } else if (toks[i].typ == OP) {
+        } else if (toks[i]->typ == OP) {
             printf("ERROR: Ops are not allowed as operands\n");
             return NULL;
         } else {
@@ -321,9 +327,25 @@ int main(void) {
     while (1) {
         printf("\\> ");
         fgets(input, 512, stdin);
-        if (strlen(input) > 0 && input[strlen(input) - 1] == '\n') {
+        
+        if (strlen(input) <= 0) {
+            printf("ERROR: Empty input\n");
+            continue;
+        }
+        
+        if (input[strlen(input) - 1] == '\n') {
+            #if DEBUG
+            printf("removed newline from input\n");
+            #endif
             input[strlen(input) - 1] = '\0';
         }
+        if (input[strlen(input) - 2] == '\r') {
+            #if DEBUG
+            printf("removed carriage return from input\n");
+            #endif
+            input[strlen(input) - 2] = '\0';
+        }
+        
         if (strcmp(input, EXIT_CMD) == 0) {
             exit(0);
         }
