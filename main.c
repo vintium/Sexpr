@@ -31,12 +31,14 @@ for example:
 typedef enum { PLUS, MINUS, MULTIPLY, DIVIDE } op_type;
 typedef enum { EXPR, INT_LITERAL, OP } token_type;
 
+char *TOK_TYP_NAMES[] = {"expr","int","op"};
+
 typedef struct s_exp {
     bool is_value;
     m_int value;
     op_type op;
-    struct s_exp *operand_1;
-    struct s_exp *operand_2;
+    struct s_exp **operands;
+
 } sexp;
 
 typedef struct {
@@ -44,6 +46,14 @@ typedef struct {
     char     *text;
     
 } token;
+
+char *fmt_token(token* tok) {
+    char *out = malloc(sizeof(char) * 512);
+    snprintf(out, 511, "Token {typ: %s, text: '%s'}",
+            TOK_TYP_NAMES[tok->typ],
+            tok->text);
+    return out;
+}
 
 
 char *pop_token(char str[], char delim) {
@@ -165,11 +175,14 @@ sexp* parse_sexp(char expr[]) {
             }
 
         }
-        #if DEBUG        
-        printf("tok = '%s'\n", tok.text);
-        #endif
+
         //skip empty tokens (caused by consecutive spaces)
-        if (strcmp(tok.text, "") == 0) { tokc--; continue; }
+        if (strcmp(tok.text, "") == 0) {
+            tokc--; continue; 
+            #if DEBUG
+            printf("skipped empty token\n");
+            #endif    
+        }
  
         // only parse 3 tokens, skip the rest
         if (tokc > 2) {
@@ -187,13 +200,16 @@ sexp* parse_sexp(char expr[]) {
     }
     
     //TODO: Check if any token remained NULL
-   
+     
 
-    #if DEBUG
+    #if DEBUG > 1
     printf("Parsing tokens...\n");
-    printf("0: '%s'\n", toks[0]->text);
-    printf("1: '%s'\n", toks[1]->text);
-    printf("2: '%s'\n", toks[2]->text);
+    for (int i = 0;
+         i < (sizeof(toks)/sizeof(token*)) && toks[i] != NULL;
+         i++) {
+        printf("%d: %s\n", i, fmt_token(toks[i]));
+ 
+    }
     #endif
     // parse
     // TODO:
@@ -204,13 +220,12 @@ sexp* parse_sexp(char expr[]) {
 
     // Parse op
     #if DEBUG
-    printf("Parsing op from token: {typ: %d, text: '%s'}\n",
-            toks[0]->typ,
-            toks[0]->text);
+    printf("Parsing op from %s       ... ", fmt_token(toks[0])); 
     #endif
     if (toks[0]->typ != OP) {
         printf("ERROR: Expected sexp to begin with op,\n");
-        printf("got {typ: %d, text: '%s'} instead.\n", toks[0]->typ,
+        printf("got {typ: %s, text: '%s'} instead.\n",
+                TOK_TYP_NAMES[toks[0]->typ],
                 toks[0]->text);
         return NULL;
     }
@@ -235,23 +250,44 @@ sexp* parse_sexp(char expr[]) {
     // Parse operands
 
     // initialize operands
-    sexp* operands[2] = { malloc(sizeof(sexp)), malloc(sizeof(sexp)) };
+    sexp **operands = malloc(sizeof(sexp*) * 2);
+    for (int i = 0; i < 2; i++) {
+        operands[i] = malloc(sizeof(sexp));
+    }
 
-
+    // go through operands
     for (int i = 1; i < 3; i++) {
+        if (toks[i] == NULL) {
+            printf("ERROR: Expressions must have 2 operands.\n");
+            return NULL;
+        }
+        #if DEBUG
+        printf("Parsing operand from %s ... ", fmt_token(toks[i]));
+        #endif
         if (toks[i]->typ == INT_LITERAL) {
+            // the operand is a value-only sexp
             operands[i - 1]->is_value = true;
             operands[i - 1]->value = parse_int(toks[i]->text);
         } else if (toks[i]->typ == EXPR) {
+            // if the operand is an expression, parse that expression
+            // into an sexp (recursively) and add it to operands
             operands[i - 1] = parse_sexp(toks[i]->text);
+            // if parsing the operand fails, pass the error on
             if (operands[i - 1] == NULL) { return NULL; }
         } else if (toks[i]->typ == OP) {
+            // operands cannot currently be operations
+            // TODO: A type system could be used to allow operands to be 
+            // of different types, right now they must be integers or
+            // sexps which resolve to integers
             printf("ERROR: Ops are not allowed as operands\n");
             return NULL;
         } else {
             printf("Unreachable\n");
             assert(false);
         }
+        #if DEBUG
+        printf("Sucessfully parsed operand\n");
+        #endif
     }
     /*
     if (parse_int(toks[1]).has_value == true &&
@@ -275,9 +311,10 @@ sexp* parse_sexp(char expr[]) {
     */
 
     res->is_value = false;
-    res->operand_1 = operands[0];
-    res->operand_2 = operands[1];
-
+    res->operands = operands;
+    #if DEBUG
+    printf("Successfully parsed sexp\n");
+    #endif
     return res;
     
 }
@@ -302,16 +339,20 @@ m_int* eval_sexp(sexp *s) {
         *res = s->value;
         return res;
     } else if (s->op == PLUS) {
-        *res = add_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        *res = add_m_int(*eval_sexp(s->operands[0]),
+                         *eval_sexp(s->operands[1]));
         return res;
     } else if (s->op == MINUS) {
-        *res = sub_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        *res = sub_m_int(*eval_sexp(s->operands[0]),
+                         *eval_sexp(s->operands[1]));
         return res;
     } else if (s->op == MULTIPLY) {
-        *res = mul_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        *res = mul_m_int(*eval_sexp(s->operands[0]), 
+                         *eval_sexp(s->operands[1]));
         return res;
     } else if (s->op == DIVIDE) {
-        *res = div_m_int(*eval_sexp(s->operand_1), *eval_sexp(s->operand_2));
+        *res = div_m_int(*eval_sexp(s->operands[0]),
+                         *eval_sexp(s->operands[1]));
         return res;
     } else {
         printf("TODO: Cannot eval sexp because %dth op is not implemented.\n", s->op);
@@ -325,7 +366,7 @@ char EXIT_CMD[] = "exit";
 int main(void) {
     char input [512];
     while (1) {
-        printf("\\> ");
+        printf("\033[95m\\>\033[0m ");
         fgets(input, 512, stdin);
         
         if (strlen(input) <= 0) {
@@ -335,21 +376,15 @@ int main(void) {
         
         if (input[strlen(input) - 1] == '\n') {
             #if DEBUG
-            printf("removed newline from input\n");
+            //printf("removed newline from input\n");
             #endif
             input[strlen(input) - 1] = '\0';
         }
-        if (input[strlen(input) - 2] == '\r') {
-            #if DEBUG
-            printf("removed carriage return from input\n");
-            #endif
-            input[strlen(input) - 2] = '\0';
-        }
-        
+
         if (strcmp(input, EXIT_CMD) == 0) {
             exit(0);
         }
-        #if DEBUG == true
+        #if DEBUG
         printf("input: '%s'\n", input);
         #endif
         m_int* m_res = eval_sexp(parse_sexp(input));
