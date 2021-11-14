@@ -31,12 +31,16 @@ for example:
 typedef enum { PLUS, MINUS, MULTIPLY, DIVIDE } op_type;
 typedef enum { EXPR, INT_LITERAL, OP } token_type;
 
+
+char *OP_TYP_NAMES[] = {"+", "-", "*", "/"};
 char *TOK_TYP_NAMES[] = {"expr","int","op"};
+
 
 typedef struct s_exp {
     bool is_value;
     m_int value;
     op_type op;
+    int operands_amt;
     struct s_exp **operands;
 
 } sexp;
@@ -156,7 +160,9 @@ sexp* parse_sexp(char expr[]) {
 
     // TODO: count how many tokens there will be
     // in order to determine how big toks needs to be
-    token *toks[3] = {NULL, NULL, NULL}; 
+    // to save space
+    token *toks[strlen(expr)];
+    for (int i = 0; i < strlen(expr); i++) { toks[i] = NULL; } 
     token tok;
     tok.text = "placeholder";
     for (int tokc = 0; tok.text != NULL && strcmp(expr, "") != 0; tokc++) {
@@ -185,11 +191,14 @@ sexp* parse_sexp(char expr[]) {
         }
  
         // only parse 3 tokens, skip the rest
+
+        /*
         if (tokc > 2) {
             printf("TODO: Parsing of more than 3 tokens per expression is not implemented, skipping remaining tokens\n");
             break;
         }
- 
+        */
+
         // add token to toks 
         token* tok_cpy = malloc(sizeof(token));
         memcpy(tok_cpy, &tok, sizeof(token));
@@ -199,23 +208,29 @@ sexp* parse_sexp(char expr[]) {
         #endif
     }
     
-    //TODO: Check if any token remained NULL
+    
+    int toks_len = (sizeof(toks) / sizeof(token*));
+    // toks will have all the tokens and then a bunch of NULL,
+    // find the actual amount of tokens there are in toks 
+    int toks_amt;
+    for (int i = 0; i < toks_len; i++) {
+        if (toks[i] == NULL) { toks_amt = i; break; }
+        else { continue; }
+    }
      
 
     #if DEBUG > 1
     printf("Parsing tokens...\n");
-    for (int i = 0;
-         i < (sizeof(toks)/sizeof(token*)) && toks[i] != NULL;
-         i++) {
+    for (int i = 0; i < toks_amt; i++) {
         printf("%d: %s\n", i, fmt_token(toks[i]));
- 
     }
     #endif
     // parse
     // TODO:
     // refactor this to supporting sexps with
     // an arbitrary amount of operands.
-
+    // TODO: make op parsing part of normal token parsing.
+    // remove op/operand dichotomy and remove op from sexp struct.
 
 
     // Parse op
@@ -239,6 +254,9 @@ sexp* parse_sexp(char expr[]) {
     } else if (strcmp(toks[0]->text, "/") == 0) {
         res-> op = DIVIDE;
     } else {
+        #if DEBUG
+        printf("X\n");
+        #endif
         printf("ERROR: '%s' is not a valid operation\n", toks[0]->text);
         return NULL;
 
@@ -250,17 +268,17 @@ sexp* parse_sexp(char expr[]) {
     // Parse operands
 
     // initialize operands
-    sexp **operands = malloc(sizeof(sexp*) * 2);
-    for (int i = 0; i < 2; i++) {
+    int operands_amt = toks_amt - 1;
+    res->operands_amt = operands_amt;
+    sexp **operands = malloc(sizeof(sexp*) * operands_amt);
+    for (int i = 0; i < operands_amt; i++) {
         operands[i] = malloc(sizeof(sexp));
     }
 
     // go through operands
-    for (int i = 1; i < 3; i++) {
-        if (toks[i] == NULL) {
-            printf("ERROR: Expressions must have 2 operands.\n");
-            return NULL;
-        }
+    for (int i = 1; i < operands_amt + 1; i++) {
+        assert(toks[i] != NULL);
+
         #if DEBUG
         printf("Parsing operand from %s ... ", fmt_token(toks[i]));
         #endif
@@ -331,7 +349,14 @@ m_int* eval_sexp(sexp *s) {
     #endif
     m_int *res;
     res = malloc(sizeof(m_int));
-
+    if (s->operands_amt > 2) {
+        printf("ERROR: '%s' expected 2 operands, recieved %d operands.\n", 
+                OP_TYP_NAMES[s->op],
+                s->operands_amt
+        );
+        return NULL;
+    }
+    
     if (s->is_value == true) {
         #if DEBUG == true
         printf("Evaled value_only sexp with val: %d\n", unwrap_m_int(s->value));
