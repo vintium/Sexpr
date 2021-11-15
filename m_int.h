@@ -7,10 +7,10 @@ typedef struct {
 
 } m_int;
 
-m_int add_m_int(m_int x, m_int y);
-m_int sub_m_int(m_int x, m_int y);
-m_int mul_m_int(m_int x, m_int y);
-m_int div_m_int(m_int x, m_int y);
+m_int add_m_int(m_int* args, int argc);
+m_int sub_m_int(m_int* args, int argc);
+m_int mul_m_int(m_int* args, int argc);
+m_int div_m_int(m_int* args, int argc);
 int unwrap_m_int(m_int x); 
 m_int parse_int(char *x); 
 

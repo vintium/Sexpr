@@ -349,6 +349,17 @@ m_int* eval_sexp(sexp *s) {
     #endif
     m_int *res;
     res = malloc(sizeof(m_int));
+    
+    // evaluate all of the operands
+    m_int *params; 
+    params = malloc(sizeof(m_int) * s->operands_amt);
+    for (int i = 0; i < s->operands_amt; i++) {
+        m_int *r = eval_sexp(s->operands[i]);
+        if (r == NULL) { return NULL; }
+        params[i] = *r;
+    }    
+
+    /*
     if (s->operands_amt > 2) {
         printf("ERROR: '%s' expected 2 operands, recieved %d operands.\n", 
                 OP_TYP_NAMES[s->op],
@@ -356,6 +367,7 @@ m_int* eval_sexp(sexp *s) {
         );
         return NULL;
     }
+    */
     
     if (s->is_value == true) {
         #if DEBUG == true
@@ -363,21 +375,18 @@ m_int* eval_sexp(sexp *s) {
         #endif
         *res = s->value;
         return res;
+    
     } else if (s->op == PLUS) {
-        *res = add_m_int(*eval_sexp(s->operands[0]),
-                         *eval_sexp(s->operands[1]));
+        *res = add_m_int(params, s->operands_amt);
         return res;
     } else if (s->op == MINUS) {
-        *res = sub_m_int(*eval_sexp(s->operands[0]),
-                         *eval_sexp(s->operands[1]));
+        *res = sub_m_int(params, s->operands_amt);
         return res;
     } else if (s->op == MULTIPLY) {
-        *res = mul_m_int(*eval_sexp(s->operands[0]), 
-                         *eval_sexp(s->operands[1]));
+        *res = mul_m_int(params, s->operands_amt);
         return res;
     } else if (s->op == DIVIDE) {
-        *res = div_m_int(*eval_sexp(s->operands[0]),
-                         *eval_sexp(s->operands[1]));
+        *res = div_m_int(params, s->operands_amt);
         return res;
     } else {
         printf("TODO: Cannot eval sexp because %dth op is not implemented.\n", s->op);

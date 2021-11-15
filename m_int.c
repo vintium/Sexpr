@@ -4,66 +4,61 @@
 #include <string.h>
 #include "m_int.h"
 
-m_int add_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value + y.value;
-        return res;
-    } else {
-         m_int none;
-        none.has_value = false;
-        return none;
-    }    
-}
+#define NONE { .has_value = false, .value = 0 }
 
-m_int sub_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value - y.value;
-        return res;
-    } else {
-        m_int none;
-        none.has_value = false;
-        return none;
+m_int None = NONE;
+
+m_int add_m_int(m_int* args, int argc) {
+
+    int acc = 0;
+    for (int i = 0; i < argc; i++) {
+        if (args[i].has_value == false) { return None; }
+        acc = acc + args[i].value;
     }
-
+    m_int res = { .has_value = true, .value = acc };
+    return res;
+       
 }
 
-
-m_int mul_m_int(m_int x, m_int y) {
-    if (x.has_value == true && y.has_value == true) {
-        m_int res;
-        res.has_value = true;
-        res.value = x.value * y.value;
-        return res;
-
-    } else {
-        m_int none;
-        none.has_value = false;
-        return none;
+m_int sub_m_int(m_int* args, int argc) {
+    
+    if (args[0].has_value == false) { return None; }
+    int acc = args[0].value;
+    for (int i = 1; i < argc; i++) {
+        if (args[i].has_value == false) { return None; }
+        acc = acc - args[i].value;
     }
-
+    m_int res = { .has_value = true, .value = acc };
+    return res;
+       
 }
 
+m_int mul_m_int(m_int* args, int argc) {
 
-m_int div_m_int(m_int x, m_int y) { 
-    m_int none;
-    none.has_value = false;
-    if (x.has_value == true && y.has_value == true) {
-        if (y.value == 0) {
-            return none;
-        }
-        m_int res;
-        res.has_value = true;
-        res.value = x.value / y.value;
-        return res;
-    } else {
-        return none;
+    if (args[0].has_value == false) { return None; }
+    int acc = args[0].value;
+    for (int i = 1; i < argc; i++) {
+        if (args[i].has_value == false) { return None; }
+        acc = acc * args[i].value;
     }
-
+    m_int res = { .has_value = true, .value = acc };
+    return res;
+       
 }
+
+m_int div_m_int(m_int* args, int argc) {
+
+    if (args[0].has_value == false) { return None; }
+    int acc = args[0].value;
+    for (int i = 1; i < argc; i++) {
+        if (args[i].has_value == false) { return None; }
+        acc = acc / args[i].value;
+    }
+    m_int res = { .has_value = true, .value = acc };
+    return res;
+       
+}
+
 
 int unwrap_m_int(m_int x) {
     if (x.has_value == true) {
